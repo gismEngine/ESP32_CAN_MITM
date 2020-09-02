@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>NOx MITM Control panel</title>
+  </head>
+
+  <body>
+		
+		
+		
+	body
+	<section> section1 </section>
+	<section id="map_section"> section2 </section>
+	<section> section3 </section>
+	
+    <script>
+		function tableCreate() {
+		  var body = document.getElementById("map_section");
+		  var tbl = document.createElement('table');
+		  
+		  tbl.style.width = '100%';
+		  tbl.setAttribute('border', '1');
+		  
+		  var tbdy = document.createElement('tbody');
+		  
+		  for (var i = 0; i < 3; i++) {
+			var tr = document.createElement('tr');
+			for (var j = 0; j < 2; j++) {
+				var td = document.createElement('td');
+				td.innerHTML = i + " - " + j;
+				tr.appendChild(td)
+			}
+			tbdy.appendChild(tr);
+		  }
+		  tbl.appendChild(tbdy);
+		  body.appendChild(tbl)
+		}
+		tableCreate();
+	</script>
+</body>
+
+
+
+

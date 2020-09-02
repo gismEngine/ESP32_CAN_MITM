@@ -1,0 +1,477 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>openDevClimb</title>
+	<link rel="stylesheet" href="css/styles.css">
+	
+    <link href="./css/styles_chart.css" rel="stylesheet" type="text/css">
+	<script language="javascript" type="text/javascript" src="./js/jquery.js"></script>
+	<script language="javascript" type="text/javascript" src="./js/jquery.canvaswrapper.js"></script>
+	<script language="javascript" type="text/javascript" src="./js/jquery.colorhelpers.js"></script>
+	<script language="javascript" type="text/javascript" src="./js/jquery.flot.js"></script>
+	<script language="javascript" type="text/javascript" src="./js/jquery.flot.saturated.js"></script>
+	<script language="javascript" type="text/javascript" src="./js/jquery.flot.browser.js"></script>
+	<script language="javascript" type="text/javascript" src="./js/jquery.flot.drawSeries.js"></script>
+	<script language="javascript" type="text/javascript" src="./js/jquery.flot.uiConstants.js"></script>
+	<script type="text/javascript">
+		var plot;
+		var max_chart_points = 300;
+		var plot_data = [];
+		var recording = false;
+		var configReady = false;
+		
+		function new_data(new_value) {
+			
+			if (plot_data.length >= max_chart_points){
+				plot_data = plot_data.slice(1);
+			}
+			
+			var t_ms = Math.round(performance.now());
+			plot_data.push([t_ms/1000, new_value])
+			
+			return plot_data;		
+		}
+
+		function add_new_chart(kg_value) {
+			plot.setData([new_data(kg_value)]);
+			plot.setupGrid(true);
+			plot.draw();
+		}
+			
+		$(document).ready(function() {
+
+			plot = $.plot("#placeholder", [ [0, 0] ], {
+				series: {
+					color: "#545454",
+					lines: { 
+						show: true ,
+						lineWidth: 2
+						},
+					//lines: { show: false },
+					points: { show: false },
+					shadowSize: 0	// Drawing is faster without shadows
+				},
+				yaxis: {
+					min: -10,
+					max: 110
+				},
+				xaxis: {
+					show: true
+				},
+				grid: {
+					backgroundColor: { colors: ["#FFFFFF", "#EEEEEE"] }
+				}
+			});
+
+		});
+	</script>
+</head>
+	<script>
+		var Socket;
+		var current_kg = 0;
+		console.log('Starting websocket at: ws://' + window.location.hostname + ':81/');
+		Socket=new WebSocket('ws://' + window.location.hostname + ':81/');
+		Socket.onmessage=function(evt){
+			//console.log(evt.data);
+			
+			var obj = JSON.parse(evt.data);
+			if(obj.ID != null){
+				if(obj.ID == "debug"){
+					document.getElementById(obj.ID).innerHTML = document.getElementById(obj.ID).innerHTML + "\n" + obj.data;
+				}else if(obj.ID == "s"){
+					if (configReady){
+						updateTable(obj.data);
+						updateCSV();
+						add_new_chart(current_kg);
+					}
+				}else{
+					//document.getElementById(obj.ID).innerHTML = obj.data;
+					//document.getElementById(obj.ID).value = obj.data;
+				}
+			}
+		}
+		
+		var t0 = performance.now();
+		function updateTable(v_raw){
+			document.getElementById("raw_v").innerHTML = v_raw;
+			
+			var s = (performance.now() - t0)
+			t0 = performance.now();
+			document.getElementById("ms_v").innerHTML = s.toFixed(1) + " ms";
+			
+			var kg = (v_raw - document.getElementById('tare').value);
+			kg = kg / document.getElementById('scale_factor').value;
+			kg = kg.toFixed(1);
+			
+			if (kg < 0) kg = 0;			
+			if (kg > 1) recording = true;
+ 
+			current_kg = kg;
+			document.getElementById("kg_v").innerHTML =  kg + " kg";
+			
+			var max_v = parseFloat(document.getElementById("max_v").innerHTML);			
+			if (max_v < kg) {
+				document.getElementById("max_v").innerHTML = kg;
+			}
+		}
+		
+		function updateCSV(){
+			
+			//toggle switch to enable and disable loggin
+			if (document.getElementById("toggle_log_enable").checked == false)
+				return;			
+			
+			// only record last 300 points before triggering:
+			if (!recording && plot_data.length >= max_chart_points) { 
+				var csv_document = document.getElementById("textAreaCSV").innerHTML;
+				var lines = csv_document.split('\n');
+				lines.splice(0,1);
+				document.getElementById("textAreaCSV").innerHTML = lines.join('\n');
+			}
+			
+			var line = "";
+			if (document.getElementById("toggle_time").checked == true){
+				line = line + performance.now() + "\t";
+			}
+			if (document.getElementById("toggle_raw").checked == true){
+				line = line + document.getElementById("raw_v").innerHTML + "\t";		
+			}
+			if (document.getElementById("toggle_phy").checked == true){
+				line = line + document.getElementById("kg_v").innerHTML + "\t";		
+			}
+			if (document.getElementById("toggle_delay").checked == true){
+				line = line + document.getElementById("ms_v").innerHTML + "\t";	
+			}
+			
+			document.getElementById("textAreaCSV").innerHTML = document.getElementById("textAreaCSV").innerHTML + "\n" + line;
+			document.getElementById("textAreaCSV").scrollTop = document.getElementById("textAreaCSV").scrollHeight;
+		}
+		
+		function resetMax(){
+			document.getElementById("max_v").innerHTML = "0";
+			document.getElementById("textAreaCSV").innerHTML = "";
+		}
+		
+		function feedchart(v_raw){
+			console.log("hola");
+		}
+		
+		
+		function sendCmd(cmd){
+			Socket.send(cmd);
+		}
+		
+		</script>
+	<body>
+
+	<div class="main_col">
+		<header>
+			<img src="img\header.png" alt="web_header" height="75">
+		</header>
+		
+		<section>
+			<table>
+				<tr>
+					<th class="table_main" colspan="2" id="kg_v">000.0 kg</th>
+				</tr>
+				<tr>
+					<th class="table_info">Max (kg):</th>
+					<th class="table_info" id="max_v">000.0</th>
+				</tr>
+				<tr>
+					<th class="table_info">Raw:</th>
+					<th class="table_info" id="raw_v">00000000</th>
+				</tr>
+				<tr>
+					<th class="table_info">Sampling:</th>
+					<th class="table_info" id="ms_v">000 ms</th>
+				</tr>
+				<tr>
+					<th class="table_info">%BM:</th>
+					<th class="table_info" id="bm_v">000 %</th>
+				</tr>
+			</table>
+		</section>
+		
+		<section>
+			<button type="button" id="reset_v" onclick="resetMax()">Reset</button>
+		</section>
+
+		<section>
+			<div class="chart-container">
+				<div id="placeholder" class="chart-placeholder"></div>
+			</div>
+		</section>		
+		
+		
+		<section>
+			<div class="wrap-collabsible">
+			  <input id="coll_csv" class="toggle" type="checkbox">
+			  <label for="coll_csv" class="lbl-toggle">CSS file config</label>
+			  <div class="collapsible-content">
+				<div class="content-inner">
+				  <p>
+					
+					<input type="checkbox" id="toggle_time" class="checkbox" checked/>  
+					<label for="toggle_time" class="switch"></label>
+					Print timestamp
+					<br>
+					
+					<input type="checkbox" id="toggle_raw" class="checkbox" checked/>  
+					<label for="toggle_raw" class="switch"></label>
+					Print raw
+					<br>
+					
+					
+					<input type="checkbox" id="toggle_phy" class="checkbox" checked/>  
+					<label for="toggle_phy" class="switch"></label>
+					Print physical value
+					<br>
+					
+					
+					<input type="checkbox" id="toggle_delay" class="checkbox" />  
+					<label for="toggle_delay" class="switch"></label>
+					Print sampling time
+					<br>
+
+					<br>
+					<br>
+					<input type="checkbox" id="toggle_log_enable" class="checkbox" />  
+					<label for="toggle_log_enable" class="switch"></label>
+					Logging activation
+					<br>
+
+
+					<textarea id="textAreaCSV" rows="3"></textarea>
+					
+					<br>
+					<button type="button" value="save" id="save">Save data to CSV</button>
+
+				  </p>
+				</div>
+			  </div>
+			</div>
+
+			<div class="wrap-collabsible">
+			  <input id="coll_conf" class="toggle" type="checkbox">
+			  <label for="coll_conf" class="lbl-toggle">Configuration</label>
+			  <div class="collapsible-content">
+				<div class="content-inner">
+					<p>
+
+					<button type="button" id="tare_button">TARE now</button>
+					
+					<script>
+						function check_tare_value(v) {
+							if ((v.value == "") || (v.value == "0") || isNaN(v.value) ){
+								v.value = v.oldvalue;
+								v.focus();
+							}else{
+								var json_cmd = '{"ID":"' + v.id + '","data":"' + v.value + '"}';
+								console.log(json_cmd);
+								sendCmd(json_cmd);
+							}
+						}
+						
+						function set_tare_current() {
+							document.getElementById('tare').value = document.getElementById('raw_v').innerHTML;
+						}
+						
+						var button_tare = document.getElementById('tare_button');
+						button_tare.addEventListener('click', set_tare_current);
+						
+						function getText(theUrl){
+							// read text from URL location
+							var request = new XMLHttpRequest();
+							request.open('GET', theUrl, true);
+							request.send(null);
+							request.onreadystatechange = function () {
+								if (request.readyState === 4 && request.status === 200) {
+									var type = request.getResponseHeader('Content-Type');
+									if (type.indexOf("text") !== 1) {
+										document.getElementById("jsonconfig").innerHTML = request.responseText;
+										return request.responseText;
+									}
+								}
+							}
+						}
+						
+						function readJson(){
+							getText("/config.json");
+						}
+						
+						function writeJson(){
+							var text = document.getElementById("jsonconfig").value; // innerHTML;
+							console.log("/!\\ WRITE json_cmd: " + text);
+							sendCmd(text);
+						}
+						
+						function shortBuzzer(){
+							sendCmd('{"ID":"cmd","data":"short_buzz"}');
+						}
+						function longBuzzer(){
+							sendCmd('{"ID":"cmd","data":"long_buzz"}');
+						}
+						function doubleBuzzer(){
+							sendCmd('{"ID":"cmd","data":"double_buzz"}');
+						}
+					</script>
+				
+					  <div class="group">
+						<input class="input_text" type="text" id="tare" value="111" onfocus="this.oldvalue = this.value;" onfocusout="check_tare_value(this)" required="required"/>
+						<label class="input_label" for="tare">Tare value</label>
+						<div class="bar"></div>
+					  </div>
+
+					  <div class="group">
+						<input class="input_text" type="text" id="scale_factor" value = "222" onfocus="this.oldvalue = this.value;" onfocusout="check_tare_value(this)" required="required"/>
+						<label class="input_label" for="scale_factor">Sensor factor</label>
+						<div class="bar"></div>
+					  </div>
+
+					  <div class="group">
+						<input class="input_text" type="text" id="body_mass" value = "70" onfocus="this.oldvalue = this.value;" onfocusout="check_tare_value(this)" required="required"/>
+						<label class="input_label" for="body_mass">Body mass (kg)</label>
+						<div class="bar"></div>
+					  </div>
+					  
+					  <textarea id="jsonconfig" rows="5"></textarea>
+
+					  <br>
+					  <button type="button" value="read" id="readJson" onclick="readJson()">Read JSON config</button> 
+					  <button type="button" value="read" id="writeJson" onclick="writeJson()">Write JSON config</button>
+					  
+					  <br><br>
+					  <button type="button" value="read" id="shortBuzz" onclick="shortBuzzer()">Short buzzer</button> 
+					  <button type="button" value="read" id="longBuzz" onclick="longBuzzer()">Long buzzer</button>
+					  <button type="button" value="read" id="doubleBuzz" onclick="doubleBuzzer()">Double buzzer</button>
+				  </p>
+				</div>
+			  </div>
+			</div>
+			
+		</section>
+		<script>
+			function getFormattedTime() {
+				var today = new Date();
+				var y = today.getFullYear();
+				// JavaScript months are 0-based.
+				var m = today.getMonth() + 1;
+				var d = today.getDate();
+				var h = today.getHours();
+				var mi = today.getMinutes();
+				var s = today.getSeconds();
+				return y + "-" + m + "-" + d + "_" + h + "-" + mi + "-" + s;
+			}
+		
+			function saveTextAsFile() {
+				var textToWrite = document.getElementById('textArea').innerHTML;
+				var textFileAsBlob = new Blob([ textToWrite ], { type: 'text/plain' });
+				var fileNameToSaveAs = 'session-' + getFormattedTime() + '.csv';
+
+				var downloadLink = document.createElement("a");
+				downloadLink.download = fileNameToSaveAs;
+				downloadLink.innerHTML = "Download File";
+				if (window.webkitURL != null) {
+				// Chrome allows the link to be clicked without actually adding it to the DOM.
+				downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+				} else {
+				// Firefox requires the link to be added to the DOM before it can be clicked.
+				downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+				downloadLink.onclick = destroyClickedElement;
+				downloadLink.style.display = "none";
+				document.body.appendChild(downloadLink);
+				}
+
+				downloadLink.click();
+				}
+
+			var button_save = document.getElementById('save');
+			button_save.addEventListener('click', saveTextAsFile);
+
+			function destroyClickedElement(event) {
+				// remove the link from the DOM
+				document.body.removeChild(event.target);
+			}
+			
+		</script>
+		
+		<section>
+			<div class="wrap-collabsible">
+			  <input id="coll_debug" class="toggle" type="checkbox">
+			  <label for="coll_debug" class="lbl-toggle">Debugging</label>
+			  <div class="collapsible-content">
+				<div class="content-inner">
+				  <p>
+					Debug messages from tool: <br>
+					<textarea id="debug" rows="3">debug data here...</textarea>
+				  </p>
+				</div>
+			  </div>
+			</div>
+		</section>
+		
+		<footer>
+			<p id="fw_id" style="display:inline"></p>
+			<p style="display:inline"> [v</p>
+			<p id="fw_vs" style="display:inline"></p>
+			<p style="display:inline">] - CC BY-SA 2.0 @ </p>
+			<a id="ip_lnk" href="http://ip.io/" target="_blank">ip</a><br>
+			Code and info: <a href="https://github.com/gism">https://github.com/gism</a>
+		
+			<script type="text/javascript">
+						
+				// Open config with scale information:
+				var b = new XMLHttpRequest();
+				b.open('GET', '/config.json');
+				b.onreadystatechange = function() {
+					document.getElementById("jsonconfig").innerHTML = b.responseText;
+					var v = b.responseText.trim();
+					v = '{' + v.substring(1,v.length - 1) + '}';   // THIS MAKE NO SENSE! IF NOT DONE ERROR!
+					
+					//var jsonObj = JSON.parse(b.responseText.trim(), function (key, value) {
+					var jsonObj = JSON.parse(v, function (key, value) {
+						if((key == "tare") || (key == "scale_factor")){
+							document.getElementById(key).innerHTML = value;
+							document.getElementById(key).value = value;
+						}
+					});
+					v = JSON.stringify(JSON.parse(v), null, 2);
+					document.getElementById("jsonconfig").innerHTML = v;
+					configReady = true;
+				}
+				b.send();
+							
+				// Fill footer with firmware metadata
+				var c = new XMLHttpRequest();
+				c.open('GET', '/name');
+				c.onreadystatechange = function() {
+					var fw_id = document.getElementById('fw_id');
+					fw_id.innerHTML = c.responseText;
+				}
+				c.send();
+				var d = new XMLHttpRequest();
+				d.open('GET', '/version');
+				d.onreadystatechange = function() {
+					var fw_vs = document.getElementById('fw_vs');
+					fw_vs.innerHTML = d.responseText;
+				}
+				d.send();
+				var e = new XMLHttpRequest();
+				e.open('GET', '/ip');
+				e.onreadystatechange = function() {
+					var ip = e.responseText;
+					var l = ''
+					l = l.concat('http://', ip, '/');
+					var ip_lnk = document.getElementById('ip_lnk');
+					ip_lnk.setAttribute('href', l);
+					ip_lnk.innerHTML = l;
+				}
+				e.send();
+			</script>		
+		</footer>
+		
+	</div>
+</body>
+</html>
